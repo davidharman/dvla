@@ -1,0 +1,102 @@
+#!/bin/zsh
+trap ctrl_c INT
+
+# DVLA - DVLA API call
+version=0.02
+# Author: David Harman
+# Date: 4th April 2023
+# Script to interact with DVLA API 
+# Requires:
+# Updated parameter with API key
+
+#####
+#Functions
+#####
+
+function logit() {
+    # Universal logging to log file and echo's output to screen
+    echo "$(date "+%d/%m/%y %H:%M:%S") $1"
+    echo "$(date "+%d/%m/%y %H:%M:%S") $1" >> $appLog
+}
+
+function ctrl_c() {
+    # Capture CTRL+C and quit camera streams and log exit
+    logit "** Trapped CTRL-C"
+    logit "Stopping CCTV"
+    codeExit
+}
+
+function pingDvla() {
+    # Ping the dlva URL 
+    ping -c 3 -n $dvlaURLBase &>/dev/null
+    if [ $? -gt 0 ]; then
+        logit "DVLA not responding to network ping" 
+    	codeExit
+    fi 
+}
+
+function codeExit() {
+    # Universal Exit includes logging
+    logit "DLVA (Process ID:$$) ended"
+    logit "-------------"
+    exit
+}
+
+#####
+# End of Functions
+#####
+
+#####
+# Parameters
+#####
+
+# Default parameters 
+appLog=~/dvla.log        # Default location for log file in users home directory
+apiKey="abcdefghijklmnopqrstuvwxyz1234567890ABCD"  # Provide your apiKey here
+dvlaURLBase="driver-vehicle-licensing.api.gov.uk"
+dvlaURL="'https://$dvlaURLBase/vehicle-enquiry/v1/vehicles'"
+dvlaPath="/Users/user/Documents/dvla" # Provide your path here
+
+#####
+# Code Start
+#####
+
+logit "DLVA (Process ID:$$) started"
+logit "Version: $version"
+
+# Help Text
+if [ "$1" = "-h" ]; then
+   echo "Usage: dvla <CarReg>"
+   echo "Optional flag -p to ping"
+  exit 
+fi
+
+if [ "$1" = "-p" ]; then
+	pingDvla # Check DVLA available
+fi
+
+if [ -z "$1" ]; then
+   echo "No Car Reg specified, exiting"    # No parameter set so exit 
+   codeExit
+else
+   echo "Using car reg:$1"
+fi
+
+URL1="'x-api-key: $apiKey'"
+URL2="'{\"registrationNumber\": \"$1\"}'"
+
+FULLURL="curl --location --request POST $dvlaURL --header $URL1 --header \'Content-Type:application/json\' --data $URL2 "
+if [ -f $dvlaPath/$1 ]; then
+	echo "Searched before"
+else
+results=$(eval "$FULLURL")
+echo $results | jq | grep -v 'yearOfManufacture\|taxStatus\|taxDueDate\|fuelType\|typeApproval\|wheelplan\|{\|}' > $dvlaPath/$1
+fi
+#cat /Users/dharman/Documents/Personal/dvla/$1
+cat $dvlaPath/$1
+
+
+open "https://www.check-mot.service.gov.uk/results?registration=$1"
+
+# Code ended
+codeExit
